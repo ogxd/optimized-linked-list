@@ -19,6 +19,16 @@ public class OptimizedLinkedList<T> : IEnumerable<T>
 
     public int LastIndex => _lastIndex;
 
+    public OptimizedLinkedList(int capacity = 4)
+    {
+        if (capacity < 1)
+            capacity = 1;
+
+        _array = new Node[capacity];
+
+        Clear();
+    }
+
     public Node this[int index]
     {
         get
@@ -35,29 +45,15 @@ public class OptimizedLinkedList<T> : IEnumerable<T>
         return index >= 0 && index < _array.Length && _array[index].used;
     }
 
-    public OptimizedLinkedList(int capacity = 4)
-    {
-        if (capacity < 1)
-            capacity = 1;
-
-        _array = new Node[capacity];
-
-        Clear();
-    }
-
     public int AddAfter(T value, int afterIndex)
     {
         if (_count == 0)
         {
             afterIndex = -1;
         }
-        else
+        else if (!_array[afterIndex].used)
         {
-            //CheckState();
-
-            // Security check
-            if (!_array[afterIndex].used)
-                throw new ArgumentException("This index does not refer to a valid entry");
+            throw new ArgumentException("This index does not refer to a valid entry");
         }
 
         // Create new node
@@ -88,8 +84,6 @@ public class OptimizedLinkedList<T> : IEnumerable<T>
         // Assign value
         newNode.value = value;
 
-        //CheckState();
-
         return index;
     }
 
@@ -101,13 +95,9 @@ public class OptimizedLinkedList<T> : IEnumerable<T>
         {
             beforeIndex = -1;
         }
-        else
+        else if (!_array[beforeIndex].used)
         {
-            //CheckState();
-
-            // Security check
-            if (!_array[beforeIndex].used)
-                throw new ArgumentException("This index does not refer to a valid entry");
+            throw new ArgumentException("This index does not refer to a valid entry");
         }
 
         // Create new node
@@ -138,12 +128,72 @@ public class OptimizedLinkedList<T> : IEnumerable<T>
         // Assign value
         newNode.value = value;
 
-        //CheckState();
-
         return index;
     }
 
     public int AddFirst(T value) => AddBefore(value, _firstIndex);
+
+    public void Clear()
+    {
+        FillFree(0, _array.Length);
+        _count = 0;
+        _firstIndex = -1;
+        _lastIndex = -1;
+    }
+
+    public bool Remove(int index)
+    {
+        if (index < 0 || index >= _array.Length)
+            return false;
+
+        ref var node = ref _array[index];
+        if (!node.used)
+            return false;
+
+        // Remap links
+        if (node.before == -1)
+        {
+            Debug.Assert(index == _firstIndex);
+            _firstIndex = node.after;
+        }
+        else
+        {
+            ref var beforeNode = ref _array[node.before];
+            beforeNode.after = node.after;
+        }
+        if (node.after == -1)
+        {
+            Debug.Assert(index == _lastIndex);
+            _lastIndex = node.before;
+        }
+        else
+        {
+            ref var afterNode = ref _array[node.after];
+            afterNode.before = node.before;
+        }
+
+        // Mark node as free
+        node.used = false;
+        node.value = default; // Free reference
+        _array[index].before = -1;
+        _array[index].after = _firstFreeNodeIndex;
+        _firstFreeNodeIndex = index;
+
+        // Decrement count
+        _count--;
+
+        return true;
+    }
+
+    public IEnumerator<T> GetEnumerator()
+    {
+        return new Enumerator(this);
+    }
+
+    IEnumerator IEnumerable.GetEnumerator()
+    {
+        return new Enumerator(this);
+    }
 
     private ref Node CreateNode(T value, out int index)
     {
@@ -176,64 +226,8 @@ public class OptimizedLinkedList<T> : IEnumerable<T>
         for (; i < start + count - 1; i++)
         {
             _array[i].after = i + 1;
-            //_array[i].before = -1;
         }
         _array[start + count - 1].after = -1;
-    }
-
-    public void Clear()
-    {
-        FillFree(0, _array.Length);
-        _count = 0;
-        _firstIndex = -1;
-        _lastIndex = -1;
-    }
-
-    public bool Remove(int index)
-    {
-        if (index < 0 || index >= _array.Length)
-            return false;
-
-        ref var node = ref _array[index];
-        if (!node.used)
-            return false;
-
-        //CheckState();
-
-        // Remap links
-        if (node.before == -1)
-        {
-            Debug.Assert(index == _firstIndex);
-            _firstIndex = node.after;
-        }
-        else
-        {
-            ref var beforeNode = ref _array[node.before];
-            beforeNode.after = node.after;
-        }
-        if (node.after == -1)
-        {
-            Debug.Assert(index == _lastIndex);
-            _lastIndex = node.before;
-        }
-        else
-        {
-            ref var afterNode = ref _array[node.after];
-            afterNode.before = node.before;
-        }
-
-        // Mark node as free
-        node.used = false;
-        _array[index].before = -1;
-        _array[index].after = _firstFreeNodeIndex;
-        _firstFreeNodeIndex = index;
-
-        // Decrement count
-        _count--;
-
-        //CheckState();
-
-        return true;
     }
 
     private bool CheckState()
@@ -265,17 +259,7 @@ public class OptimizedLinkedList<T> : IEnumerable<T>
         return true;
     }
 
-    public IEnumerator<T> GetEnumerator()
-    {
-        return new Enumerator(this);
-    }
-
-    IEnumerator IEnumerable.GetEnumerator()
-    {
-        return new Enumerator(this);
-    }
-
-    public class Enumerator : IEnumerator<T>
+    public struct Enumerator : IEnumerator<T>
     {
         private readonly OptimizedLinkedList<T> _list;
         private int _index;
