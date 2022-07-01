@@ -124,7 +124,7 @@ public class OptimizedLinkedListTests
 
         List<int> indices = new List<int>();
 
-        var random = new Random(3);
+        var random = new Random();
 
         for (int i = 0; i < 100_000; i++)
         {
