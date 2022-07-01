@@ -1,6 +1,6 @@
 # Optimized LinkedList<T>
 
-![ci workflow](https://github.com/ogxd/optimized-linked-list/actions/workflows/ci/badge.svg)
+![ci workflow](https://github.com/ogxd/optimized-linked-list/actions/workflows/ci.yml/badge.svg)
 
 Linked lists are handy structures when it comes to implementing things that needs O(1) removal while keeping an order. It is used in things like LRU caches or priority queues for instance. However, pointer based linked lists (or reference based in managed languages) tend to spread everywhere in memory. This quickly leads to lot of memory fragmentation, and can even slow down allocations and garbage collection in C# for instance by introducing a lot of additional work.    
 The linked list implementation in the repository is an alternative that is based on indices. Nodes are structures (as opposed to classes in BCL's `LinkedList<T>`) and everything is contained in a single array. On top of it, it leverages a clever trick inspired from dotnet's BCL `Dictionary<K, V>` (freeList) to find new slots without any loops (true O(1)).
@@ -41,8 +41,9 @@ Checkout `OptimizedLinkedList.Benchmarks`
 |  RemoveLastOptimized | 4.977 ns | 0.1290 ns | 0.1850 ns |         - |
 ```
 
-### 100000 Operations
+### Random Add/Remove Operations (100000 iterations)
 
+Note: The `OptimizedLinkedList<T>` is preallocated, hence it shows less allocations than the BCL `LinkedList<T>`. In any case, the non BCL version is allocation free (unless there is a capacity increase) while the BCL one allocates on each Add operation.
 ```
 |            Method |       Mean |    Error |  StdDev |   Allocated |
 |------------------ |-----------:|---------:|--------:|------------:|
