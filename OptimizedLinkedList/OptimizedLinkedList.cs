@@ -1,5 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Collections;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace OptimizedLinkedList;
 
@@ -44,7 +46,28 @@ public class OptimizedLinkedList<T> : IEnumerable<T>
     {
         return index >= 0 && index < _array.Length && _array[index].used;
     }
+    
+    public int MoveToFirst(int index)
+    {
+        var value = this[index].value;
+        Remove(index);
+        return AddFirst(value);
+    }
 
+    public int MoveToLast(int index)
+    {
+        var value = this[index].value;
+        Remove(index);
+        return AddLast(value);
+    }
+
+    /// <summary>
+    /// O(1) add after node index operation
+    /// </summary>
+    /// <param name="value"></param>
+    /// <param name="afterIndex"></param>
+    /// <returns></returns>
+    /// <exception cref="ArgumentException"></exception>
     public int AddAfter(T value, int afterIndex)
     {
         if (_count == 0)
@@ -62,12 +85,16 @@ public class OptimizedLinkedList<T> : IEnumerable<T>
         // Remap links
         if (afterIndex != -1)
         {
-            ref var afterNode = ref _array[afterIndex];
+            // No bounds check
+            ref var array = ref MemoryMarshal.GetArrayDataReference(_array);
+            ref var afterNode = ref Unsafe.Add(ref array, afterIndex);
+
             newNode.before = afterIndex;
             newNode.after = afterNode.after;
             if (afterNode.after != -1)
             {
-                _array[afterNode.after].before = index;
+                ref var afterAfterNode = ref Unsafe.Add(ref array, afterNode.after);
+                afterAfterNode.before = index;
             }
             afterNode.after = index;
 
@@ -87,8 +114,20 @@ public class OptimizedLinkedList<T> : IEnumerable<T>
         return index;
     }
 
+    /// <summary>
+    /// O(1) add last
+    /// </summary>
+    /// <param name="value"></param>
+    /// <returns></returns>
     public int AddLast(T value) => AddAfter(value, _lastIndex);
 
+    /// <summary>
+    /// O(1) add before node index operation
+    /// </summary>
+    /// <param name="value"></param>
+    /// <param name="beforeIndex"></param>
+    /// <returns></returns>
+    /// <exception cref="ArgumentException"></exception>
     public int AddBefore(T value, int beforeIndex)
     {
         if (_count == 0)
@@ -106,12 +145,17 @@ public class OptimizedLinkedList<T> : IEnumerable<T>
         // Remap links
         if (beforeIndex != -1)
         {
-            ref var beforeNode = ref _array[beforeIndex];
+            // No bounds check
+            ref var array = ref MemoryMarshal.GetArrayDataReference(_array);
+            ref var beforeNode = ref Unsafe.Add(ref array, beforeIndex);
+
+            //ref var newNode = ref _array[beforeIndex];
             newNode.before = beforeNode.before;
             newNode.after = beforeIndex;
             if (beforeNode.before != -1)
             {
-                _array[beforeNode.before].after = index;
+                ref var beforeBeforeNode = ref Unsafe.Add(ref array, beforeNode.before);
+                beforeBeforeNode.after = index;
             }
             beforeNode.before = index;
 
@@ -131,8 +175,16 @@ public class OptimizedLinkedList<T> : IEnumerable<T>
         return index;
     }
 
+    /// <summary>
+    /// O(1) add first
+    /// </summary>
+    /// <param name="value"></param>
+    /// <returns></returns>
     public int AddFirst(T value) => AddBefore(value, _firstIndex);
 
+    /// <summary>
+    /// Clear all content of the list
+    /// </summary>
     public void Clear()
     {
         FillFree(0, _array.Length);
@@ -141,12 +193,21 @@ public class OptimizedLinkedList<T> : IEnumerable<T>
         _lastIndex = -1;
     }
 
+    /// <summary>
+    /// Remove node with given index from the list. Returns true if node was found and removed, false otherwise.
+    /// After removal, node index is no longer valid.
+    /// </summary>
+    /// <param name="index"></param>
+    /// <returns></returns>
     public bool Remove(int index)
     {
         if (index < 0 || index >= _array.Length)
             return false;
 
-        ref var node = ref _array[index];
+        ref var data = ref MemoryMarshal.GetArrayDataReference(_array);
+
+        // No bounds check
+        ref var node = ref Unsafe.Add(ref data, index);
         if (!node.used)
             return false;
 
@@ -158,7 +219,7 @@ public class OptimizedLinkedList<T> : IEnumerable<T>
         }
         else
         {
-            ref var beforeNode = ref _array[node.before];
+            ref var beforeNode = ref Unsafe.Add(ref data, node.before);
             beforeNode.after = node.after;
         }
         if (node.after == -1)
@@ -168,15 +229,16 @@ public class OptimizedLinkedList<T> : IEnumerable<T>
         }
         else
         {
-            ref var afterNode = ref _array[node.after];
+            // No bounds check
+            ref var afterNode = ref Unsafe.Add(ref data, node.after);
             afterNode.before = node.before;
         }
 
         // Mark node as free
         node.used = false;
         node.value = default; // Free reference
-        _array[index].before = -1;
-        _array[index].after = _firstFreeNodeIndex;
+        node.before = -1;
+        node.after = _firstFreeNodeIndex;
         _firstFreeNodeIndex = index;
 
         // Decrement count
@@ -208,7 +270,11 @@ public class OptimizedLinkedList<T> : IEnumerable<T>
         Debug.Assert(_firstFreeNodeIndex != -1);
 
         index = _firstFreeNodeIndex;
-        ref var newNode = ref _array[_firstFreeNodeIndex];
+
+        // No bounds check
+        ref var array = ref MemoryMarshal.GetArrayDataReference(_array);
+        ref var newNode = ref Unsafe.Add(ref array, _firstFreeNodeIndex);
+
         _firstFreeNodeIndex = newNode.after;
         newNode.used = true;
         newNode.after = -1;
@@ -228,35 +294,6 @@ public class OptimizedLinkedList<T> : IEnumerable<T>
             _array[i].after = i + 1;
         }
         _array[start + count - 1].after = -1;
-    }
-
-    private bool CheckState()
-    {
-        if (_array[_firstIndex].before > -1)
-            return false;
-
-        if (_array[_lastIndex].after > -1)
-            return false;
-
-        int current = _firstIndex;
-        while (current != -1)
-        {
-            Node node = _array[current];
-            if (!node.used)
-                return false;
-
-            if (node.after != -1)
-            {
-                if (_array[node.after].before != current)
-                {
-                    return false;
-                }
-            }
-
-            current = node.after;
-        }
-
-        return true;
     }
 
     public struct Enumerator : IEnumerator<T>
